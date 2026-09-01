@@ -36,7 +36,7 @@ const PARTICLE_UNIFORMS = [
   'uNestingRatio', 'uStateCycle', 'uSpinePass', 'uSpineLayer', 'uFilamentInk', 'uPointSize',
   'uPixelRatio', 'uSymmetry', 'uBirth', 'uColorA', 'uColorB', 'uColorC',
   'uSemanticA', 'uSemanticB', 'uStateCenters[0]', 'uPortalPositions[0]',
-  'uPortalBranch', 'uPortalPreview', 'uNeuralWave', 'uZoomFreshness',
+  'uPortalBranch', 'uPortalPreview', 'uNeuralWave', 'uZoomFreshness', 'uZoomIntent',
 ];
 
 function clamp(value, minimum, maximum) {
@@ -190,6 +190,8 @@ export class GpuAttractor {
     this.neuralWaveAge = 8;
     this.neuralWaveStrength = 0;
     this.zoomFreshness = 0;
+    this.zoomIntent = 0;
+    this.zoomIntentTarget = 0;
     this.trailZoom = 1;
     this.trailOffset = new Float32Array([0, 0]);
     this.blankVao = this.gl.createVertexArray();
@@ -351,6 +353,8 @@ export class GpuAttractor {
     this.activeBranch = 0;
     this.portalBranch = 0;
     this.zoomFreshness = 0;
+    this.zoomIntent = 0;
+    this.zoomIntentTarget = 0;
     this.phaseOffsetTarget = 0;
     this.clearTrails();
     this.pulse(1);
@@ -626,6 +630,7 @@ export class GpuAttractor {
     gl.uniform1f(uniform.uSymmetry, scene.symmetry);
     gl.uniform1f(uniform.uBirth, this.birth);
     gl.uniform1f(uniform.uZoomFreshness, this.zoomFreshness);
+    gl.uniform1f(uniform.uZoomIntent, this.zoomIntent);
     gl.uniform3fv(uniform.uColorA, scene.palette.subarray(3, 6));
     gl.uniform3fv(uniform.uColorB, scene.palette.subarray(6, 9));
     gl.uniform3fv(uniform.uColorC, scene.palette.subarray(9, 12));
@@ -696,6 +701,7 @@ export class GpuAttractor {
       this.brainPulse = damp(this.brainPulse, 0, 1.1, rawDelta);
       this.neuralWaveStrength = damp(this.neuralWaveStrength, 0, 0.72, rawDelta);
       this.zoomFreshness = damp(this.zoomFreshness, 0, 3.2, rawDelta);
+      this.zoomIntent = damp(this.zoomIntent, this.zoomIntentTarget, 24, rawDelta);
       for (let index = 0; index < 4; index += 1) {
         this.pointer[index] = damp(this.pointer[index], this.pointerTarget[index], index === 2 ? 4 : 8, rawDelta);
       }
@@ -1092,6 +1098,7 @@ export class GpuAttractor {
     this.pointerTarget[3] += appliedDelta * 0.8;
     this.brainPulse = Math.max(this.brainPulse, Math.min(1, Math.abs(appliedDelta) * 2));
     this.zoomFreshness = Math.max(this.zoomFreshness, Math.min(0.65, Math.abs(appliedDelta) * 0.6));
+    if (Math.abs(appliedDelta) > 1e-12) this.zoomIntentTarget = Math.sign(appliedDelta);
     this.onDepthChange?.(this.logZoom);
   }
 
@@ -1140,6 +1147,8 @@ export class GpuAttractor {
     this.outwardParentViews.clear();
     this.activeBranch = 0;
     this.portalBranch = 0;
+    this.zoomIntent = 0;
+    this.zoomIntentTarget = 0;
     this.phaseOffsetTarget = 0;
     this.waveDepthTarget = 0;
     this.clearTrails();

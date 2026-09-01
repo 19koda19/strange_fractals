@@ -170,6 +170,7 @@ uniform int uPortalBranch;
 uniform int uPortalPreview;
 uniform vec2 uNeuralWave;
 uniform float uZoomFreshness;
+uniform float uZoomIntent;
 
 out float vAlpha;
 out float vTone;
@@ -255,7 +256,17 @@ void main() {
   float scale = exp2(uZoomPhase);
   float appearanceScale = scale;
   float progress = clamp(uZoomPhase / max(0.0001, uZoomBandOctaves), 0.0, 1.0);
-  float portalReveal = smoothstep(0.08, 0.98, progress);
+  float neutralReveal = smoothstep(0.08, 0.98, progress);
+  // Lead with whichever recursive level the gesture is moving toward. These
+  // complementary eases preserve the exact endpoint handoff and roughly
+  // constant visual mass, but give the incoming geometry a non-zero slope at
+  // once instead of waiting through most of the octave.
+  float inwardReveal = 1.0 - pow(1.0 - progress, 1.8);
+  float outwardReveal = pow(progress, 1.8);
+  float inwardIntent = smoothstep(0.0, 0.72, max(0.0, uZoomIntent));
+  float outwardIntent = smoothstep(0.0, 0.72, max(0.0, -uZoomIntent));
+  float portalReveal = mix(neutralReveal, inwardReveal, inwardIntent);
+  portalReveal = mix(portalReveal, outwardReveal, outwardIntent);
   vec4 state0 = stateAt(0);
   vec4 state1 = stateAt(1);
   vec4 state2 = stateAt(2);

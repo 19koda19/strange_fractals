@@ -183,6 +183,8 @@ class Noema {
           portalBandViews: Array.from(this.renderer.portalBandViews, ([epoch, view]) => [epoch, [...view]]),
           outwardParentViews: Array.from(this.renderer.outwardParentViews, ([epoch, view]) => [epoch, [...view]]),
           portalBranch: this.renderer.portalBranch,
+          zoomIntent: this.renderer.zoomIntent,
+          zoomIntentTarget: this.renderer.zoomIntentTarget,
           phaseOffset: this.renderer.phaseOffset,
           phaseOffsetTarget: this.renderer.phaseOffsetTarget,
           waveDepth: this.renderer.waveDepth,
@@ -220,6 +222,8 @@ class Noema {
             restored.portalBandViews = new Map(viewBeforeLoss.portalBandViews);
             restored.outwardParentViews = new Map(viewBeforeLoss.outwardParentViews);
             restored.portalBranch = viewBeforeLoss.portalBranch;
+            restored.zoomIntent = viewBeforeLoss.zoomIntent ?? 0;
+            restored.zoomIntentTarget = viewBeforeLoss.zoomIntentTarget ?? restored.zoomIntent;
             const { epoch } = restored.zoomPosition();
             restored.activeBranch = ((epoch % 3) + 3) % 3;
             restored.phaseOffset = viewBeforeLoss.phaseOffset;

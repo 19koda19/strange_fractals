@@ -29,7 +29,7 @@ The web build is produced by `npm run build` in `dist/`. The same artifact is us
 
 - **Type, then Return** — birth the root seed or commit a semantic mutation.
 - **Keep typing** — characters immediately excite the neural field; the uncommitted phrase previews a smaller transformation.
-- **Scroll / trackpad / pinch** — descend through recursive zoom octaves. Zoom is anchored near the gesture.
+- **Scroll / trackpad / pinch** — descend through the recursive zoom band. Zoom is anchored near the gesture.
 - **Drag** — comb the current and inject a decaying phase wake.
 - **Shift-drag / two-finger twist** — rotate global phase and wave depth.
 - **Double-click / double-tap** — choose a new gravitational focus.
@@ -46,16 +46,16 @@ Append `?screensaver=1` to the web or Electron renderer URL for a silent exhibit
 
 ## What is actually happening
 
-The particle field is not a video or a pre-rendered texture. p5.js owns the lifecycle and canvas; its WebGL2 context evolves 56,000–168,000 particles with GPU transform feedback. A root phrase and its specimen identity select one of four bounded chaotic systems—Thomas, Halvorsen, Aizawa, or Dadras—then pre-sample its orbit so the attractor arrives fully formed. The identity is random at birth but deterministic thereafter, including across a shared-link replay.
+The particle field is not a video or a pre-rendered texture. p5.js owns the lifecycle and canvas; its WebGL2 context evolves the field with GPU transform feedback. A root phrase and its specimen identity select one of four bounded chaotic systems—Thomas, Halvorsen, Aizawa, or Dadras—then pre-sample its orbit so the attractor arrives fully formed. The identity is random at birth but deterministic thereafter, including across a shared-link replay.
 
-Five instanced scale bands rebase around a logarithmic zoom epoch. That keeps shader coordinates bounded while the JavaScript depth can continue in either direction, creating an endless recursive descent without eventually feeding astronomical floats to the GPU.
+Every rendered particle carries a full-density primary orbit plus three independently evolved, coupled nesting states. The primary orbit keeps the phrase's strange attractor bold and legible. A cyclic Latin sheet gives each parent a complete child attractor and each child a complete grandchild relation; a seeded mask reveals sparse whole fibers around the luminous spine rather than replacing it with a cloud. Parent-conditioned rotation and scale keep those children from reading as stamped copies. Three faint candidate children already live inside the parent, while the chosen recursive child is rendered as that same attractor at full density. Zoom transfers visual weight to the existing child, then exactly rebases its geometry, size, and shading as the next root; reversible camera history keeps centered and off-center round trips continuous in either direction.
 
 The background, brain silhouette, gyri, lensing, eclipse, corona, stars, trails, and bloom are procedural shaders. There are no image assets.
 
 Language has two layers:
 
 1. A synchronous deterministic n-gram/semantic mapper makes every keystroke and phrase respond immediately, including offline.
-2. A lazy, pretrained MiniLM sentence transformer runs on-device through Transformers.js. It uses WebGPU when available and portable WASM otherwise, then eases the scene toward a semantic embedding. Similar phrases therefore create related moves while the root seed preserves the instrument's identity.
+2. A lazy, pretrained MiniLM sentence transformer runs on-device through Transformers.js. It uses WebGPU when available and portable WASM otherwise, then eases the attractor coefficients, flow, warp, symmetry, palette, and neural backdrop toward a semantic embedding. The same inference pulse contracts through the brain and ignites the corresponding attractor filaments, making their connection visible rather than merely thematic. Similar phrases therefore create related moves while the root seed preserves the instrument's identity.
 
 The model is fetched from Hugging Face on first use and cached by the browser. Phrase inference stays on the device. If the model or network is unavailable, the deterministic language field continues uninterrupted.
 

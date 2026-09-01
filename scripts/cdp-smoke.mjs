@@ -85,6 +85,7 @@ const inspection = await call('Runtime.evaluate', {
       webgl2: Boolean(gl),
       gpu: gl ? gl.getParameter(gl.RENDERER) : null,
       errorText: document.querySelector('#invitation').textContent,
+      rendererError: window.__noemaLastError ?? null,
     };
   })()`,
   returnByValue: true,

@@ -16,7 +16,10 @@ void main() {
 export const UPDATE_VERTEX = `#version 300 es
 precision highp float;
 
-layout(location = 0) in vec4 aState;
+layout(location = 0) in vec4 aState0;
+layout(location = 1) in vec4 aState1;
+layout(location = 2) in vec4 aState2;
+layout(location = 3) in vec4 aSpine;
 
 uniform int uFamily;
 uniform vec4 uA;
@@ -29,16 +32,19 @@ uniform vec4 uGesture;
 uniform vec4 uSemanticA;
 uniform vec4 uSemanticB;
 
-out vec4 vState;
+out vec4 vState0;
+out vec4 vState1;
+out vec4 vState2;
+out vec4 vSpine;
 
 float hash11(float value) {
   return fract(sin(value * 127.1 + uSeed.x * 311.7) * 43758.5453123);
 }
 
-vec3 rebirth(float identity) {
-  float a = hash11(identity + 1.13) * 6.2831853;
-  float z = hash11(identity + 8.91) * 2.0 - 1.0;
-  float radius = pow(hash11(identity + 17.7), 0.3333);
+vec3 rebirth(float identity, float layer) {
+  float a = hash11(identity + 1.13 + layer * 19.17) * 6.2831853;
+  float z = hash11(identity + 8.91 + layer * 7.31) * 2.0 - 1.0;
+  float radius = pow(hash11(identity + 17.7 + layer * 13.73), 0.3333);
   float planar = sqrt(max(0.0, 1.0 - z * z));
   float spread = uFamily == 0 ? 1.7 : (uFamily == 1 ? 0.36 : (uFamily == 2 ? 0.48 : 0.1));
   return vec3(cos(a) * planar, sin(a) * planar, z) * radius * spread;
@@ -75,39 +81,49 @@ vec3 field(vec3 p) {
   );
 }
 
-vec3 semanticBend(vec3 position, vec3 velocity) {
+vec3 semanticBend(vec3 position, vec3 velocity, float layer) {
   vec3 curl = vec3(
-    sin(position.y * (0.7 + abs(uSemanticB.x)) + uSemanticA.y * 3.1) - cos(position.z * 0.63 - uSemanticB.z),
-    sin(position.z * (0.74 + abs(uSemanticB.y)) - uSemanticA.z * 2.7) - cos(position.x * 0.67 + uSemanticB.w),
-    sin(position.x * (0.72 + abs(uSemanticB.z)) + uSemanticA.w * 2.9) - cos(position.y * 0.61 - uSemanticB.x)
+    sin(position.y * (0.7 + abs(uSemanticB.x)) + uSemanticA.y * 3.1 + layer * 0.73) - cos(position.z * 0.63 - uSemanticB.z),
+    sin(position.z * (0.74 + abs(uSemanticB.y)) - uSemanticA.z * 2.7 - layer * 0.61) - cos(position.x * 0.67 + uSemanticB.w),
+    sin(position.x * (0.72 + abs(uSemanticB.z)) + uSemanticA.w * 2.9 + layer * 0.47) - cos(position.y * 0.61 - uSemanticB.x)
   );
-  float coupling = 0.022 + (uSemanticA.x * 0.5 + 0.5) * 0.036;
+  float coupling = (0.022 + (uSemanticA.x * 0.5 + 0.5) * 0.036) * (0.94 + layer * 0.06);
   return normalize(curl + vec3(0.0001)) * max(0.02, length(velocity)) * coupling;
 }
 
-void main() {
-  float identity = aState.w + float(gl_VertexID) * 0.000071;
-  vec3 position = aState.xyz;
-  float dt = uDt * uFlow;
+vec4 advanceState(vec4 state, float layer) {
+  float identity = fract(state.w);
+  vec3 position = state.xyz;
+  float dt = uDt * uFlow * (0.965 + layer * 0.035);
   vec3 first = field(position);
-  first += semanticBend(position, first);
+  first += semanticBend(position, first, layer);
   vec3 midpoint = position + first * dt * 0.5;
   vec3 second = field(midpoint);
-  second += semanticBend(midpoint, second);
+  second += semanticBend(midpoint, second, layer);
   position += second * dt;
 
-  float gestureWave = sin(position.x * 1.7 + position.y * 1.13 + uGesture.w + uTime * 1.4);
+  float gestureWave = sin(position.x * 1.7 + position.y * 1.13 + uGesture.w + uTime * (1.32 + layer * 0.08) + layer * 1.91);
   position += vec3(
-    cos(position.z + uGesture.w),
-    sin(position.x - uGesture.w),
-    cos(position.y + uGesture.w * 0.7)
+    cos(position.z + uGesture.w + layer),
+    sin(position.x - uGesture.w - layer * 0.7),
+    cos(position.y + uGesture.w * 0.7 + layer * 0.53)
   ) * gestureWave * uGesture.z * dt * 0.06;
 
   float bound = uFamily == 1 ? 38.0 : (uFamily == 3 ? 50.0 : 12.0);
   bool broken = any(isnan(position)) || any(isinf(position)) || dot(position, position) > bound * bound;
-  if (broken) position = rebirth(identity + uTime * 0.013);
+  if (broken) position = rebirth(identity + uTime * 0.013, layer);
 
-  vState = vec4(position, fract(aState.w + 0.000037));
+  // The packed selection bit and identity are structural coordinates. Keeping
+  // them fixed prevents every simulation tick from choosing a new child
+  // rotation/scale and lets complete nested silhouettes remain coherent.
+  return vec4(position, state.w);
+}
+
+void main() {
+  vState0 = advanceState(aState0, 0.0);
+  vState1 = advanceState(aState1, 1.0);
+  vState2 = advanceState(aState2, 2.0);
+  vSpine = advanceState(aSpine, 0.0);
 }
 `;
 
@@ -120,7 +136,10 @@ void main() { outColor = vec4(0.0); }
 export const PARTICLE_VERTEX = `#version 300 es
 precision highp float;
 
-layout(location = 0) in vec4 aState;
+layout(location = 0) in vec4 aState0;
+layout(location = 1) in vec4 aState1;
+layout(location = 2) in vec4 aState2;
+layout(location = 3) in vec4 aSpine;
 
 uniform vec2 uResolution;
 uniform vec2 uCameraOffset;
@@ -133,12 +152,24 @@ uniform float uWarpFrequency;
 uniform float uRenderScale;
 uniform float uZoomPhase;
 uniform float uZoomEpoch;
+uniform float uZoomBandOctaves;
+uniform float uNestingRatio;
+uniform int uStateCycle;
+uniform int uSpinePass;
+uniform int uSpineLayer;
+uniform float uFilamentInk;
 uniform float uPointSize;
 uniform float uPixelRatio;
 uniform float uSymmetry;
 uniform float uBirth;
 uniform vec4 uSemanticA;
 uniform vec4 uSemanticB;
+uniform vec3 uStateCenters[4];
+uniform vec2 uPortalPositions[3];
+uniform int uPortalBranch;
+uniform int uPortalPreview;
+uniform vec2 uNeuralWave;
+uniform float uZoomFreshness;
 
 out float vAlpha;
 out float vTone;
@@ -154,66 +185,160 @@ mat2 rotate2(float angle) {
   return mat2(cosine, -sine, sine, cosine);
 }
 
-vec2 recursiveBranch(vec2 point, float identity, float branchLevel, float generation) {
-  float stableLevel = mod(branchLevel + 4096.0, 4096.0);
-  float branchHash = hash11(identity * 0.0137 + stableLevel * 17.17 + generation * 31.91);
-  float branch = floor(branchHash * 3.0);
-  float side = branch - 1.0;
-  float levelTurn = (hash11(stableLevel + generation * 9.73) - 0.5) * 0.18;
-  float semanticTurn = uSemanticA.x * 0.12 + uSemanticB.y * 0.08;
-  float contraction = 0.255 + uSemanticB.z * 0.007;
-  vec2 anchor;
-  if (branch < 0.5) anchor = vec2(-0.14, 0.018);
-  else if (branch < 1.5) anchor = vec2(0.0, 0.12);
-  else anchor = vec2(0.14, -0.018);
-  anchor = rotate2((uSeed.x - 0.5) * 0.7 + levelTurn) * anchor;
-  return anchor + rotate2(side * (0.2 + uSemanticB.x * 0.055) + semanticTurn + levelTurn) * point * contraction;
+vec4 stateAt(int offset) {
+  int slot = (uStateCycle + offset) % 3;
+  if (slot == 0) return aState0;
+  if (slot == 1) return aState1;
+  return aState2;
 }
 
-void main() {
-  const float zoomBandOctaves = 2.0;
-  float band = float(gl_InstanceID) - 2.0;
-  float level = mod(uZoomEpoch - band + 4096.0, 4096.0);
-  float levelHash = hash11(level + uSeed.z * 43.7);
-  float logScale = uZoomPhase + band * zoomBandOctaves;
-  float scale = exp2(logScale);
-  float fractalBloom = pow(0.5 + 0.5 * sin((uZoomPhase / zoomBandOctaves) * 6.2831853 + uSeed.w * 6.2831853 + uSemanticA.z * 1.7), 4.0);
+float slotAt(int offset) {
+  return float((uStateCycle + offset) % 3);
+}
 
-  vec3 position = aState.xyz;
-  float yaw = uPhase * 0.32 + uTime * 0.018 + (uSeed.z - 0.5) * (1.0 - uSymmetry) * 1.25 + uSemanticA.y * 0.16;
-  float pitch = 0.56 + sin(uPhase * 0.21 + uSeed.z * 6.2831 + uSemanticB.x) * 0.3;
+vec2 projectOrbit(vec4 state, float slot) {
+  vec3 center = slot < 0.5
+    ? uStateCenters[0]
+    : (slot < 1.5 ? uStateCenters[1] : uStateCenters[2]);
+  vec3 position = state.xyz - center;
+  float centeredSlot = slot - 1.0;
+  float yaw = uPhase * 0.32;
+  yaw += (uSeed.z - 0.5) * (1.0 - uSymmetry) * 1.25 + uSemanticA.y * 0.16;
+  yaw += centeredSlot * (0.29 + uSemanticB.z * 0.055);
+  float pitch = 0.56 + sin(uPhase * 0.21 + uSeed.z * 6.2831 + uSemanticB.x + slot * 1.17) * 0.3;
   position.xz = rotate2(yaw) * position.xz;
   position.yz = rotate2(pitch) * position.yz;
 
-  float flowA = sin(position.y * uWarpFrequency + uPhase + uTime * 0.19);
-  float flowB = cos(position.x * (uWarpFrequency * 0.83) - uPhase * 0.71 + uTime * 0.13);
-  vec2 displayPosition = position.xy * uRenderScale;
-  displayPosition += vec2(flowA + flowB * 0.4, flowB - flowA * 0.35) * uWarp;
+  float layerFrequency = uWarpFrequency * (0.92 + slot * 0.08);
+  float flowA = sin(position.y * layerFrequency + uPhase + slot * 1.31);
+  float flowB = cos(position.x * (layerFrequency * 0.83) - uPhase * 0.71 - slot * 0.91);
+  vec2 display = position.xy * uRenderScale;
+  display += vec2(flowA + flowB * 0.4, flowB - flowA * 0.35) * uWarp;
 
-  float identity = float(gl_VertexID);
-  float branchRole = hash11(identity * 0.0191 + uSeed.w * 71.3);
-  float levelGate = step(0.58, hash11(level + uSeed.x * 113.0));
-  float isBranch = step(0.9, branchRole) * levelGate;
-  vec2 nestedPosition = recursiveBranch(displayPosition, identity, level - 1.0, 0.0);
-  nestedPosition = recursiveBranch(nestedPosition, identity, level, 1.0);
-  float branchBlend = isBranch * 0.22;
-  displayPosition = mix(displayPosition, nestedPosition, branchBlend);
-  displayPosition = (displayPosition - uFocus) * scale;
+  float curlFrequency = 1.8 + slot * 0.37 + abs(uSemanticA.z) * 0.28;
+  vec2 curl = vec2(
+    sin(display.y * curlFrequency + slot * 2.03 + uSemanticB.x),
+    cos(display.x * (curlFrequency * 0.87) - slot * 1.73 + uSemanticA.w)
+  );
+  display += curl * uWarp * (0.12 + slot * 0.025);
+  float stretch = 1.0 + centeredSlot * (0.045 + abs(uSemanticB.y) * 0.012);
+  display = rotate2(centeredSlot * 0.075) * display;
+  display *= vec2(stretch, 1.0 / stretch);
+  return display;
+}
+
+vec2 projectSpine(vec4 state, float generation) {
+  vec3 position = state.xyz - uStateCenters[3];
+  float yaw = uPhase * 0.32;
+  yaw += (uSeed.z - 0.5) * (1.0 - uSymmetry) * 1.25 + uSemanticA.y * 0.16;
+  yaw += generation * (0.14 + uSemanticB.z * 0.025);
+  float pitch = 0.56 + sin(uPhase * 0.21 + uSeed.z * 6.2831 + uSemanticB.x + generation * 0.61) * 0.3;
+  position.xz = rotate2(yaw) * position.xz;
+  position.yz = rotate2(pitch) * position.yz;
+
+  float flowA = sin(position.y * uWarpFrequency + uPhase + generation * 0.43);
+  float flowB = cos(position.x * (uWarpFrequency * 0.83) - uPhase * 0.71 - generation * 0.37);
+  vec2 display = position.xy * uRenderScale;
+  display += vec2(flowA + flowB * 0.4, flowB - flowA * 0.35) * uWarp;
+  return rotate2(generation * 0.035) * display;
+}
+
+vec2 nestWithin(vec4 parent, vec2 child) {
+  float identity = fract(parent.w);
+  float angle = (hash11(identity * 733.1 + 17.3) - 0.5) * 0.87;
+  float scale = mix(0.88, 1.12, hash11(identity * 911.7 + 83.1));
+  return rotate2(angle) * child * scale;
+}
+
+void main() {
+  float level = mod(uZoomEpoch + 4095.0, 4095.0);
+  float scale = exp2(uZoomPhase);
+  float appearanceScale = scale;
+  float progress = clamp(uZoomPhase / max(0.0001, uZoomBandOctaves), 0.0, 1.0);
+  float portalReveal = smoothstep(0.08, 0.98, progress);
+  vec4 state0 = stateAt(0);
+  vec4 state1 = stateAt(1);
+  vec4 state2 = stateAt(2);
+  float currentGeneration = float(uStateCycle);
+  float nextGeneration = float((uStateCycle + 1) % 3);
+  vec2 displayPosition;
+  float wholeFiberGate;
+  float instanceOpacity = 1.0;
+
+  if (uSpinePass == 1) {
+    vec2 spineWorld;
+    if (uSpineLayer == 1) {
+      appearanceScale *= uNestingRatio;
+      int portalIndex = uPortalBranch;
+      vec2 portal = uPortalPositions[portalIndex];
+      vec2 child = projectSpine(aSpine, nextGeneration);
+      spineWorld = portal + child * uNestingRatio;
+      instanceOpacity = uPortalPreview == 1
+        ? 0.11 * (1.0 - portalReveal)
+        : mix(0.055, 1.0, portalReveal);
+    } else {
+      spineWorld = projectSpine(aSpine, currentGeneration);
+      // Transfer visual mass between the two real copies instead of letting a
+      // screen-filling parent linger as a translucent cloud.
+      instanceOpacity = mix(1.0, 0.05, portalReveal);
+    }
+    displayPosition = (spineWorld - uFocus) * scale;
+    wholeFiberGate = 1.0;
+  } else {
+    if (uSpineLayer == 1) {
+      appearanceScale *= uNestingRatio;
+      int portalIndex = uPortalBranch;
+      vec2 portal = uPortalPositions[portalIndex];
+      vec2 childOuter = projectOrbit(state1, slotAt(1));
+      vec2 childInner = projectOrbit(state2, slotAt(2));
+      vec2 childFiber = childOuter + nestWithin(state1, childInner) * uNestingRatio;
+      displayPosition = (portal + childFiber * uNestingRatio - uFocus) * scale;
+      wholeFiberGate = step(1.0, state1.w);
+      instanceOpacity = mix(0.035, 1.0, portalReveal);
+    } else {
+      vec2 outer = projectOrbit(state0, slotAt(0));
+      vec2 inner = projectOrbit(state1, slotAt(1));
+      // Each selected parent point owns one complete child orbit. The selected
+      // child is rendered separately, so it becomes this exact layer after the
+      // boundary instead of flashing in as unrelated geometry.
+      vec2 currentFiber = outer + nestWithin(state0, inner) * uNestingRatio;
+      displayPosition = (currentFiber - uFocus) * scale;
+      wholeFiberGate = step(1.0, state0.w);
+      instanceOpacity = mix(1.0, 0.04, portalReveal);
+    }
+  }
 
   float aspect = uResolution.x / max(1.0, uResolution.y);
   vec2 clip = vec2(displayPosition.x / aspect, displayPosition.y) + uCameraOffset;
   vec2 viewportFade = 1.0 - smoothstep(vec2(0.92), vec2(1.04), abs(clip));
   float edgeFade = viewportFade.x * viewportFade.y;
-  float scaleWindow = smoothstep(-4.0, -3.0, logScale) * (1.0 - smoothstep(3.0, 4.0, logScale));
-  float scaleWeight = exp(-0.5 * pow(logScale / 0.8, 2.0));
-  float branchWeight = mix(1.0, mix(0.12, 0.38, fractalBloom) * mix(0.9, 1.0, levelHash), isBranch);
-  float densityAlpha = clamp(exp2(logScale * 0.10), 0.72, 1.22);
-
-  vAlpha = edgeFade * scaleWindow * scaleWeight * branchWeight * densityAlpha * uBirth;
-  vTone = fract(aState.w * 2.7 + position.z * 0.09 + levelHash * 0.7);
-  vSpark = pow(max(0.0, sin(aState.w * 937.0 + uTime * 0.8)), 18.0);
-  float densityPointSize = clamp(exp2(logScale * 0.07), 0.82, 1.18);
-  gl_PointSize = uPointSize * uPixelRatio * densityPointSize * (0.82 + vSpark * 1.55);
+  float appearanceLevel = mod(level + float(uSpineLayer), 4095.0);
+  float levelHash = hash11(appearanceLevel + uSeed.z * 43.7);
+  float densityAlpha = clamp(pow(max(0.25, appearanceScale), 0.055), 0.82, 1.14);
+  vAlpha = edgeFade * densityAlpha * wholeFiberGate * instanceOpacity * uFilamentInk * uBirth * (1.0 + uZoomFreshness * 0.15);
+  vec4 toneState0 = uSpinePass == 1
+    ? aSpine
+    : (uSpineLayer == 1 ? state1 : state0);
+  vec4 toneState1 = uSpineLayer == 1 ? state2 : state1;
+  vec4 toneState2 = uSpineLayer == 1 ? state0 : state2;
+  vTone = uSpinePass == 1
+    ? fract(toneState0.w * 2.7 + toneState0.z * 0.09 + levelHash * 0.7)
+    : fract(fract(toneState0.w) * 1.71 + fract(toneState1.w) * 0.73 + fract(toneState2.w) * 0.31 + toneState0.z * 0.09 + levelHash * 0.7);
+  float sparkIdentity = uSpinePass == 1
+    ? toneState0.w
+    : fract(toneState0.w) + fract(toneState1.w) * 0.37 + fract(toneState2.w) * 0.13;
+  vSpark = pow(max(0.0, sin(sparkIdentity * 937.0 + uTime * 0.8)), 18.0);
+  vec2 neuralPoint = vec2(clip.x * aspect, clip.y - 0.035);
+  neuralPoint.y *= 1.07;
+  float neuralRadius = max(0.05, 0.83 - uNeuralWave.x * 0.56);
+  float neuralTransfer = exp(-abs(length(neuralPoint * vec2(0.88, 1.0)) - neuralRadius) * 34.0) * uNeuralWave.y;
+  vAlpha *= 1.0 + neuralTransfer * (uSpinePass == 1 ? 2.25 : 0.68);
+  vSpark = max(vSpark, neuralTransfer);
+  float densityPointSize = clamp(pow(max(0.25, appearanceScale), 0.045), 0.84, 1.14);
+  float pointProfile = uSpinePass == 1
+    ? 0.82 + vSpark * 1.55
+    : 0.52 + vSpark * 0.72;
+  gl_PointSize = uPointSize * uPixelRatio * densityPointSize * pointProfile;
   gl_Position = vec4(clip, 0.0, 1.0);
 }
 `;
@@ -369,14 +494,15 @@ void main() {
   silhouette = max(silhouette, stem * 0.58);
 
   float warp = fbm(brainPoint * (4.2 + uNeural.x * 0.48) + vec2(motionTime * 0.035, -motionTime * 0.025));
-  float gyriA = 1.0 - abs(sin((brainPoint.y * (8.0 + uNeural.x) + brainPoint.x * 3.2 + warp * (2.2 + uNeural.z) + uPhase * 0.08) * 3.14159));
+  float gyriA = 1.0 - abs(sin((brainPoint.y * (8.0 + uNeural.x) + brainPoint.x * 3.2 + warp * (2.2 + uNeural.z)) * 3.14159 + uPhase * 0.08));
   float gyriB = 1.0 - abs(sin((brainPoint.x * (7.2 + uNeural.y * 1.8) - brainPoint.y * 2.1 - warp * 2.0) * 3.14159));
   float gyri = pow(max(gyriA, gyriB * 0.78), 9.0);
   float neural = pow(max(0.0, sin((brainPoint.x + warp * 0.16) * 31.0) * cos((brainPoint.y - warp * 0.12) * 27.0)), 12.0);
   float cortexPulse = 0.74 + 0.26 * sin(motionTime * 1.1 + warp * 8.0 + uBrainPulse * 4.0);
   float signalRadius = max(0.05, 0.83 - uNeuralWave.x * 0.56);
   float signalRing = exp(-abs(length(brainPoint * vec2(0.88, 1.0)) - signalRadius) * 34.0);
-  float signalRoutes = pow(max(0.0, sin((brainPoint.x + warp * 0.12) * 36.0 - uNeuralWave.x * 13.0)), 18.0) * neural;
+  float semanticRoute = dot(uSemanticA.xy, vec2(2.7, -1.9)) + dot(uSemanticB.zw, vec2(1.3, 2.1));
+  float signalRoutes = pow(max(0.0, sin((brainPoint.x + warp * 0.12) * 36.0 - uNeuralWave.x * 13.0 + semanticRoute)), 18.0) * neural;
   float neuralSignal = (signalRing * 0.7 + signalRoutes) * uNeuralWave.y * silhouette;
   float brainLight = silhouette * (0.022 + gyri * 0.15 + neural * 0.16) * uBrain * cortexPulse * (1.0 + uBrainPulse * 0.72) + neuralSignal * 0.28;
   color += mix(uColorA, uColorB, warp) * brainLight * (0.34 + uBirth * 0.66);
@@ -414,7 +540,17 @@ void main() {
   lensedWorld += pointerVector * (uPointer.z * 0.008 / pointerDistance);
   vec3 trail = sampleTrail(uvFromWorld(lensedWorld));
   float diskMask = smoothstep(uEclipse * 0.7, uEclipse * 1.22, horizonRadius);
-  color += trail * mix(0.94, 1.0, diskMask);
+  float trailEnergy = clamp(max(trail.r, max(trail.g, trail.b)) * 2.25, 0.0, 1.0);
+  float inferenceBurst = uNeuralWave.y * exp(-uNeuralWave.x * 0.42);
+  float cortexContact = silhouette * trailEnergy * uBrain;
+  float synapticContact = clamp(gyri * 0.72 + neural * 0.64 + neuralSignal * 1.8, 0.0, 1.0);
+  vec3 contactColor = mix(uColorB, uColorC, clamp(warp * 0.72 + uSemanticA.w * 0.12 + 0.12, 0.0, 1.0));
+  // The language embedding does not merely tint two unrelated layers: the
+  // cortex lights at their actual points of contact, then a completed neural
+  // inference sends that light back through the living attractor.
+  color += contactColor * cortexContact * (0.055 + synapticContact * 0.16 + inferenceBurst * 0.18);
+  float attractorIgnition = 1.0 + inferenceBurst * (0.32 + silhouette * 0.46 + neuralSignal * 0.9);
+  color += trail * mix(0.98, 1.06, diskMask) * attractorIgnition;
 
   vec2 starCell = floor(gl_FragCoord.xy / 3.0);
   float star = step(0.9978, hash21(starCell + floor(uSeed.zw * 811.0)));

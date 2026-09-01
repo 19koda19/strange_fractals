@@ -171,10 +171,26 @@ class Noema {
       event.preventDefault();
       if (this.renderer) {
         viewBeforeLoss = {
+          scene: this.renderer.scene ? structuredClone(this.renderer.scene) : null,
+          targetScene: this.renderer.targetScene ? structuredClone(this.renderer.targetScene) : null,
+          stateCenters: Float32Array.from(this.renderer.stateCenters),
+          portalStates: Float32Array.from(this.renderer.portalStates),
           logZoom: this.renderer.logZoom,
           cameraOffset: Float32Array.from(this.renderer.cameraOffset),
           focus: Float32Array.from(this.renderer.focus),
+          focusHistory: Array.from(this.renderer.focusHistory, ([epoch, focus]) => [epoch, [...focus]]),
+          navigationChoices: Array.from(this.renderer.navigationChoices),
+          portalBandViews: Array.from(this.renderer.portalBandViews, ([epoch, view]) => [epoch, [...view]]),
+          outwardParentViews: Array.from(this.renderer.outwardParentViews, ([epoch, view]) => [epoch, [...view]]),
+          portalBranch: this.renderer.portalBranch,
           phaseOffset: this.renderer.phaseOffset,
+          phaseOffsetTarget: this.renderer.phaseOffsetTarget,
+          waveDepth: this.renderer.waveDepth,
+          waveDepthTarget: this.renderer.waveDepthTarget,
+          pointer: Float32Array.from(this.renderer.pointer),
+          pointerTarget: Float32Array.from(this.renderer.pointerTarget),
+          morphSpeed: this.renderer.morphSpeed,
+          elapsed: this.renderer.elapsed,
         };
       }
       p.noLoop();
@@ -185,21 +201,44 @@ class Noema {
       requestAnimationFrame(() => {
         try {
           const restored = this.makeRenderer(p);
-          if (this.committedScene && this.rootSeed) restored.seed(this.committedScene);
-          else {
+          if (this.committedScene && this.rootSeed) {
+            restored.seed(viewBeforeLoss?.scene ?? this.committedScene);
+          } else {
             const dormant = deriveScene('the unspoken noema', 'sleeping neural eclipse', fallbackEmbedding('sleeping neural eclipse'), 0);
             restored.setDormant(dormant);
           }
           if (viewBeforeLoss) {
-            restored.logZoom = viewBeforeLoss.logZoom;
+            if (viewBeforeLoss.scene) restored.scene = structuredClone(viewBeforeLoss.scene);
+            if (viewBeforeLoss.targetScene) restored.targetScene = structuredClone(viewBeforeLoss.targetScene);
+            restored.stateCenters.set(viewBeforeLoss.stateCenters);
+            restored.portalStates.set(viewBeforeLoss.portalStates);
+            restored.logZoom = restored.zoomPosition(viewBeforeLoss.logZoom).logZoom;
             restored.cameraOffset.set(viewBeforeLoss.cameraOffset);
             restored.focus.set(viewBeforeLoss.focus);
+            restored.focusHistory = new Map(viewBeforeLoss.focusHistory);
+            restored.navigationChoices = new Map(viewBeforeLoss.navigationChoices);
+            restored.portalBandViews = new Map(viewBeforeLoss.portalBandViews);
+            restored.outwardParentViews = new Map(viewBeforeLoss.outwardParentViews);
+            restored.portalBranch = viewBeforeLoss.portalBranch;
+            const { epoch } = restored.zoomPosition();
+            restored.activeBranch = ((epoch % 3) + 3) % 3;
             restored.phaseOffset = viewBeforeLoss.phaseOffset;
-            restored.phaseOffsetTarget = viewBeforeLoss.phaseOffset;
+            restored.phaseOffsetTarget = viewBeforeLoss.phaseOffsetTarget;
+            restored.waveDepth = viewBeforeLoss.waveDepth;
+            restored.waveDepthTarget = viewBeforeLoss.waveDepthTarget;
+            restored.pointer.set(viewBeforeLoss.pointer);
+            restored.pointerTarget.set(viewBeforeLoss.pointerTarget);
+            restored.morphSpeed = viewBeforeLoss.morphSpeed;
+            restored.elapsed = viewBeforeLoss.elapsed;
           }
           this.renderer = restored;
           if (this.gestures) this.gestures.renderer = restored;
           this.hasRenderedError = false;
+          if (import.meta.env.DEV) window.__noemaLastError = null;
+          this.dom.input.disabled = false;
+          this.dom.invitation.textContent = this.rootSeed
+            ? 'keep speaking; each phrase becomes a mutation'
+            : 'give the void a phrase';
           p.loop();
           this.showStatus('the field has returned', 1800);
         } catch (error) {
@@ -736,6 +775,7 @@ class Noema {
   renderError(error) {
     if (this.hasRenderedError) return;
     this.hasRenderedError = true;
+    if (import.meta.env.DEV) window.__noemaLastError = error?.stack || error?.message || String(error);
     console.error(error);
     this.dom.invitation.textContent = 'this machine could not open a WebGL2 dream';
     this.dom.status.textContent = 'hardware acceleration or WebGL2 may be unavailable';

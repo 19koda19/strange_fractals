@@ -335,7 +335,7 @@ try {
         focus: Array.from(window.__noemaDev.renderer.focus),
         trailZoom: window.__noemaDev.renderer.trailZoom,
         trailOffset: Array.from(window.__noemaDev.renderer.trailOffset),
-        zoomVitality: window.__noemaDev.renderer.zoomVitality,
+        zoomFreshness: window.__noemaDev.renderer.zoomFreshness,
         elapsed: window.__noemaDev.renderer.elapsed,
         family: window.__noemaDev.renderer.scene?.familyName ?? null,
       } : null,

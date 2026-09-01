@@ -362,6 +362,111 @@ export function makeInitialParticles(rootSeed, family, count, scene = null) {
   return data;
 }
 
+function selectWholeFibers(rootSeed, layer, sampleCount) {
+  const selectedCount = clamp(Math.round(sampleCount * (45 / 320)), 1, sampleCount);
+  const ranked = Array.from({ length: sampleCount }, (_, index) => ({
+    index,
+    score: hashString(`${rootSeed}\u241fwhole-fiber:${layer}:${index}`),
+  }));
+  ranked.sort((left, right) => left.score - right.score || left.index - right.index);
+  return new Set(ranked.slice(0, selectedCount).map(({ index }) => index));
+}
+
+function makeOrbitLayer(rootSeed, family, sampleCount, scene, layer) {
+  const rng = createRng(`${rootSeed}\u241fnested-attractor:${layer}`);
+  const selectedFibers = selectWholeFibers(rootSeed, layer, sampleCount);
+  const samples = new Float32Array(sampleCount * 4);
+  const spreads = [1.8, 0.42, 0.56, 0.12];
+  const spread = spreads[family] ?? 0.5;
+  const bound = family === 1 ? 38 : family === 3 ? 50 : 12;
+  const burnIn = ([2800, 6800, 3600, 14_000][family] ?? 4000) + layer * 317;
+  const orbitSpan = [3200, 5200, 4400, 7600][family] ?? 4200;
+  const step = scene.dt * scene.flow * (0.965 + layer * 0.035);
+  const sampleSpacing = orbitSpan / sampleCount;
+  const wholeSampleSteps = Math.floor(sampleSpacing);
+  const fractionalSampleStep = sampleSpacing - wholeSampleSteps;
+  let position = [
+    (rng() * 2 - 1) * spread,
+    (rng() * 2 - 1) * spread,
+    (rng() * 2 - 1) * spread,
+  ];
+
+  const advance = (stepScale = 1) => {
+    position = integratePoint(position, family, scene, step * stepScale);
+    const lengthSquared = position[0] ** 2 + position[1] ** 2 + position[2] ** 2;
+    if (!position.every(Number.isFinite) || lengthSquared > bound * bound) {
+      position = [
+        (rng() * 2 - 1) * spread,
+        (rng() * 2 - 1) * spread,
+        (rng() * 2 - 1) * spread,
+      ];
+    }
+  };
+
+  for (let index = 0; index < burnIn; index += 1) advance();
+  for (let index = 0; index < sampleCount; index += 1) {
+    for (let sample = 0; sample < wholeSampleSteps; sample += 1) advance();
+    if (fractionalSampleStep > 0.000001) advance(fractionalSampleStep);
+    const offset = index * 4;
+    const dust = spread * 0.00004;
+    samples[offset] = position[0] + (rng() - 0.5) * dust;
+    samples[offset + 1] = position[1] + (rng() - 0.5) * dust;
+    samples[offset + 2] = position[2] + (rng() - 0.5) * dust;
+    const phase = ((index + 0.5) / sampleCount + layer * 0.271828) % 1;
+    // The integer bit is a stable, layer-specific whole-fiber selection flag.
+    // Keeping it on the orbit sample means every copy of that parent either
+    // reveals all of its child attractor or none of it.
+    samples[offset + 3] = phase + (selectedFibers.has(index) ? 1 : 0);
+  }
+
+  return samples;
+}
+
+/**
+ * Builds a balanced Latin sheet through three independently living attractors.
+ * Every outer sample owns a complete child orbit, while the modular sum makes
+ * the same sheet invariant under parent → child → grandchild role cycling.
+ * The renderer reveals only a seeded subset of whole fibers at any one level,
+ * retaining true child silhouettes without filling the product into a cloud.
+ */
+export function makeNestedParticles(rootSeed, family, requestedRadix, scene) {
+  if (!scene) throw new TypeError('A derived scene is required to seed nested attractors.');
+  const radix = Math.max(3, Math.floor(requestedRadix));
+  const particleCount = radix * radix;
+  const layers = [0, 1, 2].map((layer) => makeOrbitLayer(rootSeed, family, radix, scene, layer));
+  const spine = makeInitialParticles(rootSeed, family, particleCount, scene);
+  const data = new Float32Array(particleCount * 16);
+  const latinSalt = hashString(`${rootSeed}\u241fnested-latin-sum`) % radix;
+  let vertex = 0;
+
+  for (let outer = 0; outer < radix; outer += 1) {
+    for (let inner = 0; inner < radix; inner += 1) {
+      const indices = [
+        outer,
+        inner,
+        (latinSalt - outer - inner + radix * 2) % radix,
+      ];
+      const target = vertex * 16;
+      for (let layer = 0; layer < 3; layer += 1) {
+        const source = indices[layer] * 4;
+        const offset = target + layer * 4;
+        data[offset] = layers[layer][source];
+        data[offset + 1] = layers[layer][source + 1];
+        data[offset + 2] = layers[layer][source + 2];
+        data[offset + 3] = layers[layer][source + 3];
+      }
+      const spineSource = vertex * 4;
+      data[target + 12] = spine[spineSource];
+      data[target + 13] = spine[spineSource + 1];
+      data[target + 14] = spine[spineSource + 2];
+      data[target + 15] = spine[spineSource + 3];
+      vertex += 1;
+    }
+  }
+
+  return data;
+}
+
 export function encodeSession(rootSeed, mutations, specimenId = '') {
   const root = String(rootSeed).slice(0, 280);
   const specimen = String(specimenId || '').slice(0, 96);
